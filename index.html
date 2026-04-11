@@ -209,7 +209,6 @@
   function flashSuccess() {
     const card = document.getElementById("appCard");
     card.classList.remove("pulse");
-    // reflow
     void card.offsetWidth;
     card.classList.add("pulse");
   }
@@ -222,7 +221,7 @@
   }
 
   function buildScannerConfig() {
-    const config = {
+    return {
       fps: 25,
       qrbox: function(viewfinderWidth, viewfinderHeight) {
         const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
@@ -231,15 +230,9 @@
       },
       aspectRatio: 1.0,
       disableFlip: false,
-      rememberLastUsedCamera: true
+      rememberLastUsedCamera: true,
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
     };
-
-    // QRだけ読めればいいので、対応していれば対象を絞る
-    if (window.Html5QrcodeSupportedFormats) {
-      config.formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE];
-    }
-
-    return config;
   }
 
   async function startScan() {
@@ -263,7 +256,7 @@
     };
 
     const onScanFailure = (_errorMessage) => {
-      // 途中失敗は大量に出るので無視
+      // 途中失敗は無視
     };
 
     try {
