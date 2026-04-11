@@ -148,7 +148,7 @@
     <h1>QRゲート（旧→新）</h1>
     <div class="muted">
       このページからQRを読み取ると、旧フォームQRでも新Webアプリへ自動で移動します。<br>
-      読みにくい場合は、画像からの読み取りやURL貼り付けも使えます。
+      小さいQRは、少し近づけて1秒ほど止めると安定しやすいです。
     </div>
 
     <div class="row">
@@ -158,7 +158,7 @@
 
     <div class="reader-wrap">
       <div id="reader"></div>
-      <div class="scan-hint">枠に収まるように少し離して読むと安定します</div>
+      <div class="scan-hint">小さいQRは少し近づけて、1秒ほど止めると安定します</div>
     </div>
 
     <div class="muted">読み取りにくい場合は、QR画像から読み取ることもできます。</div>
@@ -223,10 +223,10 @@
 
   function buildScannerConfig() {
     return {
-      fps: 18,
+      fps: 12,
       qrbox: function(viewfinderWidth, viewfinderHeight) {
         const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        const size = Math.floor(minEdge * 0.7);
+        const size = Math.floor(minEdge * 0.75);
         return { width: size, height: size };
       },
       aspectRatio: 1.0,
@@ -266,7 +266,7 @@
 
       setTimeout(() => {
         stopScan();
-      }, 50);
+      }, 80);
     };
 
     const onScanFailure = (_errorMessage) => {
@@ -281,7 +281,7 @@
         onScanFailure
       );
       document.getElementById("stopBtn").disabled = false;
-      setStatus("QRを枠に収めてください。少し離すと安定して読みやすいです。", true);
+      setStatus("小さいQRは少し近づけて、1秒ほど止めると安定します。", true);
     } catch (e1) {
       try {
         await scanner.start(
@@ -291,7 +291,7 @@
           onScanFailure
         );
         document.getElementById("stopBtn").disabled = false;
-        setStatus("QRを枠に収めてください。", true);
+        setStatus("カメラを起動しました。小さいQRは少し近づけて止めてください。", true);
       } catch (e2) {
         setStatus(
           "カメラを起動できませんでした。ブラウザの権限設定を確認してください。<br>" +
