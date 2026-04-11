@@ -4,492 +4,171 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>qr-gateway</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      margin: 0;
-      padding: 16px;
+      font-family: system-ui;
       background: #f5f7fb;
-      color: #1f2937;
+      padding: 16px;
     }
     .card {
-      max-width: 760px;
-      margin: 24px auto;
-      border: 1px solid #ddd;
-      border-radius: 16px;
-      padding: 16px;
+      max-width: 600px;
+      margin: auto;
       background: #fff;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-    }
-    h1 {
-      margin: 0 0 12px;
-      font-size: 22px;
-      color: #005bbb;
-    }
-    .muted {
-      color: #666;
-      font-size: 13px;
-      margin-bottom: 12px;
-    }
-    .row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin: 10px 0;
+      padding: 16px;
+      border-radius: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     button {
-      font-size: 16px;
       padding: 10px 14px;
       border-radius: 10px;
-      border: 1px solid #ccc;
-      background: #fff;
-      cursor: pointer;
-    }
-    button.primary {
-      border-color: #005bbb;
+      border: none;
       background: #005bbb;
       color: #fff;
+      font-size: 16px;
     }
-    button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-
-    .reader-wrap {
-      position: relative;
-      width: 100%;
-      max-width: 560px;
-      margin: 12px 0;
-      border-radius: 14px;
-      overflow: hidden;
-      background: #111;
-    }
-
     #reader {
       width: 100%;
-      max-width: 560px;
-      margin: 0;
+      margin-top: 10px;
     }
-
-    .scan-hint {
-      position: absolute;
-      left: 50%;
-      bottom: 12px;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.6);
-      color: #fff;
-      font-size: 12px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      pointer-events: none;
-      z-index: 3;
-      white-space: nowrap;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 90px;
-      font-size: 14px;
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-    }
-
-    input[type="file"] {
-      display: block;
-      margin: 10px 0;
-    }
-
     .status {
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: 14px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      display: none;
-      line-height: 1.6;
-      word-break: break-all;
-    }
-    .status.show { display: block; }
-    .status.ok {
-      color: #0a7;
-      background: #eaf9ef;
-    }
-    .status.ng {
-      color: #c00;
-      background: #fdeeee;
-    }
-    a {
-      word-break: break-all;
-    }
-    code {
-      display: inline-block;
-      background: rgba(0,0,0,0.04);
-      padding: 2px 4px;
-      border-radius: 4px;
-      white-space: pre-wrap;
-    }
-
-    .pulse {
-      animation: pulse 0.28s ease-out 1;
-    }
-
-    @keyframes pulse {
-      0%   { transform: scale(1); }
-      50%  { transform: scale(1.02); }
-      100% { transform: scale(1); }
     }
   </style>
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
+
 <body>
-  <div class="card" id="appCard">
-    <h1>QRゲート（旧→新）</h1>
-    <div class="muted">
-      このページからQRを読み取ると、旧フォームQRでも新Webアプリへ自動で移動します。
-    </div>
+<div class="card">
+  <h2>QRスキャン</h2>
 
-    <div class="row">
-      <button class="primary" id="startBtn">スキャン開始</button>
-      <button id="stopBtn" disabled>停止</button>
-    </div>
+  <button onclick="startScan()">スキャン開始</button>
 
-    <div class="reader-wrap">
-      <div id="reader"></div>
-      <div class="scan-hint">枠に収まるように少し離して読むと速いです</div>
-    </div>
+  <div id="reader"></div>
 
-    <div class="muted">読み取りにくい場合は、QR画像から読み取ることもできます。</div>
-    <input type="file" id="imageInput" accept="image/*">
-
-    <div class="muted">保険用：QRの中身URLを貼り付けても解決できます。</div>
-    <textarea id="urlInput" placeholder="ここに旧URLまたは新URLを貼り付け"></textarea>
-
-    <div class="row">
-      <button id="resolveBtn">解決して移動</button>
-    </div>
-
-    <div class="status" id="status"></div>
-  </div>
+  <div class="status" id="status"></div>
+</div>
 
 <script>
-  // 本体URL
-  const NEW_APP_BASE = "https://script.google.com/macros/s/AKfycbymQ38NePg8TM6bUfgQhFE34fN-0ssKP8OUl4yxWYExNVWyIFe-XUVfdH-g-X0hrsR6/exec";
 
-  // CONFIG: form_id ごとの entry 設定
-  const CONFIG = {
-    "1FAIpQLSctg5egf5P0heDhSv_buehOF1Q1dNJsz4lhihPO0o3EoK0yIQ": {
-      entry_id: "entry.87256745",
-      entry_product_no: "entry.1899071023"
-    }
-  };
+const NEW_APP_BASE = "https://script.google.com/macros/s/AKfycbymQ38NePg8TM6bUfgQhFE34fN-0ssKP8OUl4yxWYExNVWyIFe-XUVfdH-g-X0hrsR6/exec";
 
-  // MAP: product_no → id
-  const MAP = {
-    "40-588-6101-1_塗装": "142"
-  };
-
-  let scanner = null;
-  let isResolving = false;
-
-  function setStatus(msg, ok = false) {
-    const el = document.getElementById("status");
-    el.className = "status show " + (ok ? "ok" : "ng");
-    el.innerHTML = msg;
+const CONFIG = {
+  "1FAIpQLSctg5egf5P0heDhSv_buehOF1Q1dNJsz4lhihPO0o3EoK0yIQ": {
+    entry_id: "entry.87256745",
+    entry_product_no: "entry.1899071023"
   }
+};
 
-  function vibrateSuccess() {
-    try {
-      if (navigator.vibrate) {
-        navigator.vibrate([40, 30, 80]);
+const MAP = {
+  "40-588-6101-1_塗装": "142"
+};
+
+let scanner = null;
+let isResolving = false;
+
+// 🔥 精度向上用
+let lastText = "";
+let sameCount = 0;
+
+function setStatus(msg) {
+  document.getElementById("status").innerText = msg;
+}
+
+function vibrate() {
+  if (navigator.vibrate) {
+    navigator.vibrate(80);
+  }
+}
+
+async function startScan() {
+  scanner = new Html5Qrcode("reader");
+
+  const config = {
+    fps: 18,
+    qrbox: (w, h) => {
+      const size = Math.floor(Math.min(w, h) * 0.7);
+      return { width: size, height: size };
+    },
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+  };
+
+  await scanner.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText) => {
+
+      // 🔥 2回一致チェック
+      if (decodedText === lastText) {
+        sameCount++;
+      } else {
+        lastText = decodedText;
+        sameCount = 1;
       }
-    } catch (_) {}
-  }
 
-  function flashSuccess() {
-    const card = document.getElementById("appCard");
-    card.classList.remove("pulse");
-    void card.offsetWidth;
-    card.classList.add("pulse");
-  }
+      if (sameCount < 2) return;
 
-  function markBusy(busy) {
-    isResolving = busy;
-    document.getElementById("startBtn").disabled = busy;
-    document.getElementById("resolveBtn").disabled = busy;
-    document.getElementById("imageInput").disabled = busy;
-  }
-
-  function buildScannerConfig() {
-    return {
-      fps: 25,
-      qrbox: function(viewfinderWidth, viewfinderHeight) {
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        const size = Math.floor(minEdge * 0.58);
-        return { width: size, height: size };
-      },
-      aspectRatio: 1.0,
-      disableFlip: false,
-      rememberLastUsedCamera: true,
-      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-    };
-  }
-
-  async function startScan() {
-    if (scanner || isResolving) return;
-
-    setStatus("カメラを起動しています...", true);
-    markBusy(false);
-
-    scanner = new Html5Qrcode("reader");
-    const config = buildScannerConfig();
-
-    const onScanSuccess = (decodedText) => {
       if (isResolving) return;
-      markBusy(true);
-      vibrateSuccess();
-      flashSuccess();
+      isResolving = true;
+
+      vibrate();
+
       resolveText(decodedText);
+
       setTimeout(() => {
-        stopScan();
+        scanner.stop();
       }, 50);
-    };
-
-    const onScanFailure = (_errorMessage) => {
-      // 途中失敗は無視
-    };
-
-    try {
-      await scanner.start(
-        { facingMode: { exact: "environment" } },
-        config,
-        onScanSuccess,
-        onScanFailure
-      );
-      document.getElementById("stopBtn").disabled = false;
-      setStatus("QRを枠に収めてください。少し離すと速く読み取りやすいです。", true);
-    } catch (e1) {
-      try {
-        await scanner.start(
-          { facingMode: "environment" },
-          config,
-          onScanSuccess,
-          onScanFailure
-        );
-        document.getElementById("stopBtn").disabled = false;
-        setStatus("QRを枠に収めてください。", true);
-      } catch (e2) {
-        setStatus(
-          "カメラを起動できませんでした。ブラウザの権限設定を確認してください。<br>" +
-          escapeHtml(String(e2))
-        );
-        scanner = null;
-      }
     }
+  );
+}
+
+function resolveText(text) {
+
+  // 新URL
+  if (text.includes("product_id=")) {
+    location.href = text;
+    return;
   }
 
-  async function stopScan() {
-    if (!scanner) {
-      document.getElementById("stopBtn").disabled = true;
+  // 旧URL
+  if (text.includes("docs.google.com/forms")) {
+
+    const formIdMatch = text.match(/\/forms\/d\/e\/([^/]+)/);
+    const formId = formIdMatch ? formIdMatch[1] : "";
+
+    const config = CONFIG[formId];
+    if (!config) {
+      setStatus("CONFIG未登録");
       return;
     }
-    try { await scanner.stop(); } catch (_) {}
-    try { await scanner.clear(); } catch (_) {}
-    scanner = null;
-    document.getElementById("stopBtn").disabled = true;
-    markBusy(false);
-  }
 
-  async function scanImageFile(file) {
-    if (!file || isResolving) return;
-
-    markBusy(true);
-    setStatus("画像からQRを解析しています...", true);
-
-    const tempScanner = new Html5Qrcode("reader");
-    try {
-      const decodedText = await tempScanner.scanFile(file, true);
-      vibrateSuccess();
-      flashSuccess();
-      resolveText(decodedText);
-    } catch (e) {
-      setStatus("画像からQRを読み取れませんでした。別の画像か、通常スキャンを試してください。<br>" + escapeHtml(String(e)));
-      markBusy(false);
-    } finally {
-      try { await tempScanner.clear(); } catch (_) {}
-    }
-  }
-
-  function resolveText(text) {
-    try {
-      const raw = String(text || "").trim();
-
-      if (!raw) {
-        setStatus("読み取り結果が空です。");
-        markBusy(false);
-        return;
-      }
-
-      // 新URLはそのまま
-      if (raw.includes("script.google.com/macros/") && raw.includes("product_id=")) {
-        const url = raw;
-        setStatus(
-          "新URLを検出しました。移動します。<br><a href='" +
-          escapeAttr(url) +
-          "'>" +
-          escapeHtml(url) +
-          "</a>",
-          true
-        );
-        window.location.href = url;
-        return;
-      }
-
-      // 旧URL
-      if (raw.includes("docs.google.com/forms/") || raw.includes("forms.gle/")) {
-        const parsed = parseOldFormUrl(raw);
-
-        if (!parsed.ok) {
-          setStatus(parsed.message + "<br><br>読み取り結果:<br><code>" + escapeHtml(raw) + "</code>");
-          markBusy(false);
-          return;
-        }
-
-        let id = parsed.id || "";
-
-        if (!id && parsed.productNo) {
-          id = MAP[parsed.productNo] || "";
-        }
-
-        if (!id) {
-          setStatus(
-            "製品IDを特定できませんでした。<br>" +
-            "製品番号: <code>" + escapeHtml(parsed.productNo || "") + "</code><br><br>" +
-            "読み取り結果:<br><code>" + escapeHtml(raw) + "</code>"
-          );
-          markBusy(false);
-          return;
-        }
-
-        const url = NEW_APP_BASE + "?product_id=" + encodeURIComponent(id);
-
-        setStatus(
-          "移動します...<br><a href='" +
-          escapeAttr(url) +
-          "'>" +
-          escapeHtml(url) +
-          "</a>",
-          true
-        );
-
-        window.location.href = url;
-        return;
-      }
-
-      setStatus(
-        "QRの形式が不明です。<br><br>読み取り結果:<br><code>" +
-        escapeHtml(raw) +
-        "</code>"
-      );
-      markBusy(false);
-
-    } catch (e) {
-      setStatus("解析に失敗しました。<br>" + escapeHtml(String(e)));
-      markBusy(false);
-    }
-  }
-
-  function parseOldFormUrl(oldUrl) {
-    const url = String(oldUrl || "").trim();
-
-    if (url.includes("forms.gle/")) {
-      return {
-        ok: false,
-        message: "短縮URL（forms.gle）はまだ未対応です。展開後の本URLが必要です。"
-      };
-    }
-
-    const m = url.match(/\/forms\/d\/e\/([^/?]+)\/viewform/);
-    const formId = m ? m[1] : "";
-
-    if (!formId) {
-      return {
-        ok: false,
-        message: "フォームIDを抽出できませんでした。"
-      };
-    }
-
-    const cfg = CONFIG[formId];
-    if (!cfg) {
-      return {
-        ok: false,
-        message: "このQRはまだ未登録です。form_id: " + escapeHtml(formId)
-      };
-    }
-
-    const query = url.split("?")[1] || "";
     const params = {};
-
-    query.split("&").forEach(pair => {
-      if (!pair) return;
-      const eq = pair.indexOf("=");
-      const key = eq >= 0 ? pair.slice(0, eq) : pair;
-      const val = eq >= 0 ? pair.slice(eq + 1) : "";
-      if (!key) return;
-      params[key] = decodeURIComponent(String(val || "").replace(/\+/g, " "));
+    text.split("?")[1]?.split("&").forEach(p => {
+      const [k, v] = p.split("=");
+      params[k] = decodeURIComponent(v || "");
     });
 
-    const rawId = params[cfg.entry_id] || "";
-    const rawProductNo = params[cfg.entry_product_no] || "";
+    let id = params[config.entry_id];
 
-    const id = rawId ? (String(rawId).match(/\d+/) || [""])[0] : "";
-    const productNo = rawProductNo ? String(rawProductNo).trim() : "";
-
-    if (!id && !productNo) {
-      return {
-        ok: false,
-        message: "IDと製品番号の両方を取得できませんでした。"
-      };
+    if (!id) {
+      const productNo = params[config.entry_product_no];
+      id = MAP[productNo];
     }
 
-    return { ok: true, id, productNo, formId };
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&':'&amp;',
-      '<':'&lt;',
-      '>':'&gt;',
-      '"':'&quot;',
-      "'":'&#39;'
-    }[c]));
-  }
-
-  function escapeAttr(s) {
-    return escapeHtml(s);
-  }
-
-  document.getElementById("startBtn").addEventListener("click", startScan);
-  document.getElementById("stopBtn").addEventListener("click", stopScan);
-
-  document.getElementById("resolveBtn").addEventListener("click", () => {
-    const value = document.getElementById("urlInput").value.trim();
-    if (!value) {
-      setStatus("URL貼り付け欄が空です。");
+    if (!id) {
+      setStatus("ID解決失敗");
       return;
     }
-    markBusy(true);
-    vibrateSuccess();
-    flashSuccess();
-    resolveText(value);
-  });
 
-  document.getElementById("imageInput").addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) {
-      scanImageFile(file);
-    }
-  });
+    location.href = NEW_APP_BASE + "?product_id=" + id;
+    return;
+  }
+
+  setStatus("QR形式不明");
+}
+
 </script>
 </body>
 </html>
