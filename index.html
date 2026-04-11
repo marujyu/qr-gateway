@@ -56,7 +56,7 @@
     }
     #reader {
       width: 100%;
-      max-width: 520px;
+      max-width: 560px;
       margin: 12px 0;
     }
     textarea {
@@ -68,12 +68,17 @@
       border: 1px solid #ccc;
       box-sizing: border-box;
     }
+    input[type="file"] {
+      display: block;
+      margin: 10px 0;
+    }
     .status {
       margin-top: 12px;
       font-size: 14px;
       padding: 10px 12px;
       border-radius: 10px;
       display: none;
+      line-height: 1.5;
     }
     .status.show { display: block; }
     .status.ok {
@@ -101,6 +106,9 @@
     </div>
 
     <div id="reader"></div>
+
+    <div class="muted">読み取りにくい場合は、QR画像から読み取ることもできます。</div>
+    <input type="file" id="imageInput" accept="image/*">
 
     <div class="muted">保険用：QRの中身URLを貼り付けても解決できます。</div>
     <textarea id="urlInput" placeholder="ここに旧URLまたは新URLを貼り付け"></textarea>
@@ -144,25 +152,54 @@
 
     scanner = new Html5Qrcode("reader");
     const config = {
-      fps: 10,
-      qrbox: { width: 260, height: 260 },
+      fps: 15,
+      qrbox: function(viewfinderWidth, viewfinderHeight) {
+        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+        const size = Math.floor(minEdge * 0.8);
+        return { width: size, height: size };
+      },
+      aspectRatio: 1.0,
+      disableFlip: false,
       rememberLastUsedCamera: true
     };
 
     try {
       await scanner.start(
-        { facingMode: "environment" },
+        { facingMode: { exact: "environment" } },
         config,
         (decodedText) => {
           stopScan();
           resolveText(decodedText);
+        },
+        (_errorMessage) => {
+          // 読み取り途中の失敗は無視
         }
       );
       document.getElementById("stopBtn").disabled = false;
-      setStatus("QRを枠内に入れてください。", true);
-    } catch (e) {
-      setStatus("カメラを起動できませんでした。ブラウザの権限設定を確認してください。<br>" + escapeHtml(String(e)));
-      scanner = null;
+      setStatus("QRを枠内に入れてください。少し離して全体が入るようにすると読み取りやすいです。", true);
+    } catch (e1) {
+      try {
+        // exact が通らない端末向けフォールバック
+        await scanner.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            stopScan();
+            resolveText(decodedText);
+          },
+          (_errorMessage) => {
+            // 読み取り途中の失敗は無視
+          }
+        );
+        document.getElementById("stopBtn").disabled = false;
+        setStatus("QRを枠内に入れてください。", true);
+      } catch (e2) {
+        setStatus(
+          "カメラを起動できませんでした。ブラウザの権限設定を確認してください。<br>" +
+          escapeHtml(String(e2))
+        );
+        scanner = null;
+      }
     }
   }
 
@@ -172,6 +209,22 @@
     try { await scanner.clear(); } catch (e) {}
     scanner = null;
     document.getElementById("stopBtn").disabled = true;
+  }
+
+  async function scanImageFile(file) {
+    if (!file) return;
+
+    setStatus("画像からQRを解析しています...", true);
+
+    const tempScanner = new Html5Qrcode("reader");
+    try {
+      const decodedText = await tempScanner.scanFile(file, true);
+      resolveText(decodedText);
+    } catch (e) {
+      setStatus("画像からQRを読み取れませんでした。別の画像か、通常スキャンを試してください。<br>" + escapeHtml(String(e)));
+    } finally {
+      try { await tempScanner.clear(); } catch (e) {}
+    }
   }
 
   function resolveText(text) {
@@ -280,6 +333,12 @@
       return;
     }
     resolveText(value);
+  });
+  document.getElementById("imageInput").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      scanImageFile(file);
+    }
   });
 </script>
 </body>
