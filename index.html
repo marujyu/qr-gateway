@@ -78,7 +78,8 @@
       padding: 10px 12px;
       border-radius: 10px;
       display: none;
-      line-height: 1.5;
+      line-height: 1.6;
+      word-break: break-all;
     }
     .status.show { display: block; }
     .status.ok {
@@ -89,7 +90,16 @@
       color: #c00;
       background: #fdeeee;
     }
-    a { word-break: break-all; }
+    a {
+      word-break: break-all;
+    }
+    code {
+      display: inline-block;
+      background: rgba(0,0,0,0.04);
+      padding: 2px 4px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+    }
   </style>
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -179,7 +189,6 @@
       setStatus("QRを枠内に入れてください。少し離して全体が入るようにすると読み取りやすいです。", true);
     } catch (e1) {
       try {
-        // exact が通らない端末向けフォールバック
         await scanner.start(
           { facingMode: "environment" },
           config,
@@ -230,42 +239,77 @@
   function resolveText(text) {
     try {
       const raw = String(text || "").trim();
+
       if (!raw) {
         setStatus("読み取り結果が空です。");
         return;
       }
 
+      // まず生データを表示
+      setStatus("読み取り結果:<br><code>" + escapeHtml(raw) + "</code>", true);
+
       // 新URLはそのまま
       if (raw.includes("script.google.com/macros/") && raw.includes("product_id=")) {
-        setStatus("移動します...", true);
-        window.location.href = raw;
+        const url = raw;
+        setStatus(
+          "新URLを検出しました。移動します。<br><a href='" +
+          escapeAttr(url) +
+          "'>" +
+          escapeHtml(url) +
+          "</a>",
+          true
+        );
+        window.location.href = url;
         return;
       }
 
-      if (!raw.includes("docs.google.com/forms/")) {
-        setStatus("QRの形式が不明です。");
+      // 旧URL（許容を少し広げる）
+      if (raw.includes("docs.google.com/forms/") || raw.includes("forms.gle/")) {
+        const parsed = parseOldFormUrl(raw);
+
+        if (!parsed.ok) {
+          setStatus(
+            parsed.message + "<br><br>読み取り結果:<br><code>" + escapeHtml(raw) + "</code>"
+          );
+          return;
+        }
+
+        let id = parsed.id || "";
+
+        if (!id && parsed.productNo) {
+          id = MAP[parsed.productNo] || "";
+        }
+
+        if (!id) {
+          setStatus(
+            "製品IDを特定できませんでした。<br>" +
+            "製品番号: <code>" + escapeHtml(parsed.productNo || "") + "</code><br><br>" +
+            "読み取り結果:<br><code>" + escapeHtml(raw) + "</code>"
+          );
+          return;
+        }
+
+        const url = NEW_APP_BASE + "?product_id=" + encodeURIComponent(id);
+
+        setStatus(
+          "移動します...<br><a href='" +
+          escapeAttr(url) +
+          "'>" +
+          escapeHtml(url) +
+          "</a>",
+          true
+        );
+
+        window.location.href = url;
         return;
       }
 
-      const parsed = parseOldFormUrl(raw);
-      if (!parsed.ok) {
-        setStatus(parsed.message);
-        return;
-      }
+      setStatus(
+        "QRの形式が不明です。<br><br>読み取り結果:<br><code>" +
+        escapeHtml(raw) +
+        "</code>"
+      );
 
-      let id = parsed.id || "";
-      if (!id && parsed.productNo) {
-        id = MAP[parsed.productNo] || "";
-      }
-
-      if (!id) {
-        setStatus("製品IDを特定できませんでした。製品番号: " + escapeHtml(parsed.productNo || ""));
-        return;
-      }
-
-      const url = NEW_APP_BASE + "?product_id=" + encodeURIComponent(id);
-      setStatus("移動します...<br><a href='" + escapeAttr(url) + "'>" + escapeHtml(url) + "</a>", true);
-      window.location.href = url;
     } catch (e) {
       setStatus("解析に失敗しました。<br>" + escapeHtml(String(e)));
     }
@@ -274,15 +318,30 @@
   function parseOldFormUrl(oldUrl) {
     const url = String(oldUrl || "").trim();
 
+    // forms.gle は現時点では form_id を抜けないので、そのまま案内
+    if (url.includes("forms.gle/")) {
+      return {
+        ok: false,
+        message: "短縮URL（forms.gle）はまだ未対応です。展開後の本URLが必要です。"
+      };
+    }
+
     const m = url.match(/\/forms\/d\/e\/([^/?]+)\/viewform/);
     const formId = m ? m[1] : "";
+
     if (!formId) {
-      return { ok: false, message: "フォームIDを抽出できませんでした。" };
+      return {
+        ok: false,
+        message: "フォームIDを抽出できませんでした。"
+      };
     }
 
     const cfg = CONFIG[formId];
     if (!cfg) {
-      return { ok: false, message: "このQRはまだ未登録です。form_id: " + escapeHtml(formId) };
+      return {
+        ok: false,
+        message: "このQRはまだ未登録です。form_id: " + escapeHtml(formId)
+      };
     }
 
     const query = url.split("?")[1] || "";
@@ -304,7 +363,10 @@
     const productNo = rawProductNo ? String(rawProductNo).trim() : "";
 
     if (!id && !productNo) {
-      return { ok: false, message: "IDと製品番号の両方を取得できませんでした。" };
+      return {
+        ok: false,
+        message: "IDと製品番号の両方を取得できませんでした。"
+      };
     }
 
     return { ok: true, id, productNo, formId };
