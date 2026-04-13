@@ -15,6 +15,7 @@
       background: #f5f7fb;
       color: #1f2937;
     }
+
     .card {
       max-width: 760px;
       margin: 24px auto;
@@ -24,23 +25,43 @@
       background: #fff;
       box-shadow: 0 6px 18px rgba(0,0,0,0.06);
     }
+
     h1 {
       margin: 0 0 12px;
       font-size: 22px;
       color: #005bbb;
     }
+
     .muted {
       color: #666;
       font-size: 13px;
       margin-bottom: 12px;
-      line-height: 1.6;
+      line-height: 1.7;
     }
+
+    .guide-box {
+      margin: 14px 0 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f7fbff;
+      border: 1px solid #d9e8ff;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .guide-title {
+      font-weight: 700;
+      color: #005bbb;
+      margin-bottom: 6px;
+    }
+
     .row {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       margin: 10px 0;
     }
+
     button {
       font-size: 16px;
       padding: 10px 14px;
@@ -49,11 +70,19 @@
       background: #fff;
       cursor: pointer;
     }
+
     button.primary {
       border-color: #005bbb;
       background: #005bbb;
       color: #fff;
     }
+
+    button.sub {
+      border-color: #2f6feb;
+      color: #2f6feb;
+      background: #eef5ff;
+    }
+
     button:disabled {
       opacity: 0.6;
       cursor: default;
@@ -92,12 +121,18 @@
 
     textarea {
       width: 100%;
-      min-height: 90px;
+      min-height: 110px;
       font-size: 14px;
       padding: 10px;
       border-radius: 10px;
       border: 1px solid #ccc;
       box-sizing: border-box;
+      line-height: 1.5;
+    }
+
+    textarea.auto-filled {
+      border-color: #2f6feb;
+      background: #f7fbff;
     }
 
     input[type="file"] {
@@ -114,16 +149,25 @@
       line-height: 1.6;
       word-break: break-all;
     }
-    .status.show { display: block; }
+
+    .status.show {
+      display: block;
+    }
+
     .status.ok {
       color: #0a7;
       background: #eaf9ef;
     }
+
     .status.ng {
       color: #c00;
       background: #fdeeee;
     }
-    a { word-break: break-all; }
+
+    a {
+      word-break: break-all;
+    }
+
     code {
       display: inline-block;
       background: rgba(0,0,0,0.04);
@@ -146,9 +190,17 @@
 <body>
   <div class="card" id="appCard">
     <h1>QRゲート（旧→新）</h1>
+
     <div class="muted">
       このページからQRを読み取ると、旧フォームQRでも新Webアプリへ自動で移動します。<br>
       小さいQRは、少し近づけて1秒ほど止めると安定しやすいです。
+    </div>
+
+    <div class="guide-box">
+      <div class="guide-title">QRが読めない場合</div>
+      1. iPhoneのカメラでQRを読み取る<br>
+      2. 表示されたURLをコピーする<br>
+      3. この画面で「クリップボードを貼り付け」を押す
     </div>
 
     <div class="row">
@@ -164,10 +216,14 @@
     <div class="muted">読み取りにくい場合は、QR画像から読み取ることもできます。</div>
     <input type="file" id="imageInput" accept="image/*">
 
-    <div class="muted">保険用：QRの中身URLを貼り付けても解決できます。</div>
+    <div class="muted">
+      保険用：URLを貼り付けても解決できます。<br>
+      うまくいかない場合は、まず「クリップボードを貼り付け」を押してください。
+    </div>
     <textarea id="urlInput" placeholder="ここに旧URLまたは新URLを貼り付け"></textarea>
 
     <div class="row">
+      <button class="sub" id="pasteBtn">クリップボードを貼り付け</button>
       <button id="resolveBtn">解決して移動</button>
     </div>
 
@@ -192,11 +248,18 @@
   let isResolving = false;
   let lastText = "";
   let sameCount = 0;
+  let triedClipboardAuto = false;
 
   function setStatus(msg, ok = false) {
     const el = document.getElementById("status");
     el.className = "status show " + (ok ? "ok" : "ng");
     el.innerHTML = msg;
+  }
+
+  function clearStatus() {
+    const el = document.getElementById("status");
+    el.className = "status";
+    el.innerHTML = "";
   }
 
   function vibrateSuccess() {
@@ -219,6 +282,7 @@
     document.getElementById("startBtn").disabled = busy;
     document.getElementById("resolveBtn").disabled = busy;
     document.getElementById("imageInput").disabled = busy;
+    document.getElementById("pasteBtn").disabled = busy;
   }
 
   function buildScannerConfig() {
@@ -234,6 +298,102 @@
       rememberLastUsedCamera: true,
       formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
     };
+  }
+
+  function looksLikeResolvableUrl(text) {
+    const s = String(text || "").trim();
+    if (!s) return false;
+
+    return (
+      s.startsWith("http://") ||
+      s.startsWith("https://") ||
+      s.includes("docs.google.com/forms/") ||
+      s.includes("forms.gle/") ||
+      s.includes("script.google.com/macros/")
+    );
+  }
+
+  function setUrlInputValue(text, fromClipboard = false) {
+    const input = document.getElementById("urlInput");
+    input.value = String(text || "").trim();
+
+    if (fromClipboard) {
+      input.classList.add("auto-filled");
+    } else {
+      input.classList.remove("auto-filled");
+    }
+  }
+
+  async function tryClipboardAutoFill() {
+    if (triedClipboardAuto) return;
+    triedClipboardAuto = true;
+
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+
+      if (!looksLikeResolvableUrl(text)) {
+        return;
+      }
+
+      setUrlInputValue(text, true);
+      setStatus(
+        "クリップボードからURLを見つけました。<br>" +
+        "内容を確認して「解決して移動」を押してください。",
+        true
+      );
+    } catch (_) {
+      // iPhone / Safari では自動読取が拒否されても普通なので無視
+    }
+  }
+
+  async function pasteFromClipboardAndResolve(autoResolve = true) {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      setStatus("このブラウザではクリップボード読み取りに対応していません。URLを手で貼り付けてください。");
+      return;
+    }
+
+    if (isResolving) return;
+
+    try {
+      const text = await navigator.clipboard.readText();
+
+      if (!text || !String(text).trim()) {
+        setStatus("クリップボードが空です。QRのURLをコピーしてから押してください。");
+        return;
+      }
+
+      setUrlInputValue(text, true);
+
+      if (!looksLikeResolvableUrl(text)) {
+        setStatus(
+          "クリップボードの内容はURLではなさそうです。<br><code>" +
+          escapeHtml(String(text)) +
+          "</code>"
+        );
+        return;
+      }
+
+      if (!autoResolve) {
+        setStatus("クリップボードからURLを貼り付けました。", true);
+        return;
+      }
+
+      markBusy(true);
+      vibrateSuccess();
+      flashSuccess();
+      resolveText(text);
+
+    } catch (e) {
+      setStatus(
+        "クリップボードを読み取れませんでした。<br>" +
+        "iPhoneでは確認メッセージが出る場合があります。もう一度試すか、手で貼り付けてください。<br><br>" +
+        escapeHtml(String(e))
+      );
+    }
   }
 
   async function startScan() {
@@ -307,8 +467,10 @@
       document.getElementById("stopBtn").disabled = true;
       return;
     }
+
     try { await scanner.stop(); } catch (_) {}
     try { await scanner.clear(); } catch (_) {}
+
     scanner = null;
     document.getElementById("stopBtn").disabled = true;
     markBusy(false);
@@ -327,7 +489,10 @@
       flashSuccess();
       resolveText(decodedText);
     } catch (e) {
-      setStatus("画像からQRを読み取れませんでした。別の画像か、通常スキャンを試してください。<br>" + escapeHtml(String(e)));
+      setStatus(
+        "画像からQRを読み取れませんでした。別の画像か、通常スキャンを試してください。<br>" +
+        escapeHtml(String(e))
+      );
       markBusy(false);
     } finally {
       try { await tempScanner.clear(); } catch (_) {}
@@ -362,7 +527,9 @@
         const parsed = parseOldFormUrl(raw);
 
         if (!parsed.ok) {
-          setStatus(parsed.message + "<br><br>読み取り結果:<br><code>" + escapeHtml(raw) + "</code>");
+          setStatus(
+            parsed.message + "<br><br>読み取り結果:<br><code>" + escapeHtml(raw) + "</code>"
+          );
           markBusy(false);
           return;
         }
@@ -469,11 +636,11 @@
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
-      '&':'&amp;',
-      '<':'&lt;',
-      '>':'&gt;',
-      '"':'&quot;',
-      "'":'&#39;'
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;"
     }[c]));
   }
 
@@ -490,10 +657,15 @@
       setStatus("URL貼り付け欄が空です。");
       return;
     }
+
     markBusy(true);
     vibrateSuccess();
     flashSuccess();
     resolveText(value);
+  });
+
+  document.getElementById("pasteBtn").addEventListener("click", () => {
+    pasteFromClipboardAndResolve(true);
   });
 
   document.getElementById("imageInput").addEventListener("change", (e) => {
@@ -501,6 +673,12 @@
     if (file) {
       scanImageFile(file);
     }
+  });
+
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      tryClipboardAutoFill();
+    }, 300);
   });
 </script>
 </body>
